@@ -127,45 +127,68 @@ async fn main() -> Result<(), AppError> {
         }
     }
 
-    let Some(pattern) = product_pattern else {
-        println!("No product URL pattern identified – nothing to validate.");
-        return Ok(());
-    };
-
-    let candidate_urls: Vec<&String> = unique_links
-        .iter()
-        .filter(|url| pattern.is_match(url))
-        .collect();
-
-    println!(
-        "{} URLs match the product pattern",
-        candidate_urls.len()
-    );
-
     let http = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()?;
 
     let mut confirmed_products: Vec<String> = Vec::new();
 
-    for url in &candidate_urls {
-        match http.get(url.as_str()).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.text().await {
-                    Ok(html) => {
-                        if is_product_page(&html) {
-                            println!("Product page: {}", url);
-                            confirmed_products.push(url.to_string());
-                        }
+    match product_pattern {
+        Some(pattern) => {
+            // ── Strategy 1: Gemini found a URL pattern ─────────────────────
+            // Only keep URLs that match the pattern; skip heuristic HTML check.
+            let candidate_urls: Vec<&String> = unique_links
+                .iter()
+                .filter(|url| pattern.is_match(url))
+                .collect();
+
+            println!(
+                "{} URLs match the product pattern – confirming via HTTP …",
+                candidate_urls.len()
+            );
+
+            for url in &candidate_urls {
+                match http.get(url.as_str()).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        println!("✓ Product page (pattern): {}", url);
+                        confirmed_products.push(url.to_string());
                     }
-                    Err(e) => eprintln!("Could not read body of {}: {}", url, e),
+                    Ok(resp) => {
+                        eprintln!("{} returned HTTP {}", url, resp.status());
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to fetch {}: {}", url, e);
+                    }
                 }
             }
-            Ok(resp) => {
-                eprintln!("{} returned HTTP {}", url, resp.status());
-            }
-            Err(e) => {
-                eprintln!("Failed to fetch {}: {}", url, e);
+        }
+        None => {
+            // ── Strategy 2 (fallback): No pattern – use HTML heuristics ────
+            println!(
+                "No product URL pattern found – falling back to heuristic HTML analysis for all {} URLs …",
+                unique_links.len()
+            );
+
+            for url in &unique_links {
+                match http.get(url.as_str()).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        match resp.text().await {
+                            Ok(html) => {
+                                if is_product_page(&html) {
+                                    println!("✓ Product page (heuristic): {}", url);
+                                    confirmed_products.push(url.to_string());
+                                }
+                            }
+                            Err(e) => eprintln!("Could not read body of {}: {}", url, e),
+                        }
+                    }
+                    Ok(resp) => {
+                        eprintln!("{} returned HTTP {}", url, resp.status());
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to fetch {}: {}", url, e);
+                    }
+                }
             }
         }
     }
