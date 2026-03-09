@@ -52,16 +52,41 @@ impl GeminiClient {
             strict: None,
         };
 
+        let sample = if urls.len() > 10 { &urls[..10] } else { urls };
         let prompt = format!(
-            "You are an expert at analysing e-commerce website URL structures.\n\
-            Below is a list of URLs from a single website. Your task is to identify \
-            a regex pattern that matches product page URLs.\n\n\
-            Rules:\n\
-            - Analyse the URL paths for common structural patterns (e.g. /product/, /p/, /item/, /dp/).\n\
-            - Return a regex string that would match most product URLs on this site.\n\
-            - If you cannot find a consistent pattern, return an EMPTY string for \"pattern\".\n\
-            - Return only valid JSON in this exact shape: {{\"pattern\":\"...\"}}\n\n\
-            URLs:\n{}",
+            "You are a URL pattern-recognition expert for e-commerce and auction websites.\n\
+            \n\
+            I give you a list of FULL URLs from one website. Return a Rust-compatible regex that \
+            matches ONLY individual product detail page URLs (one product per page).\n\
+            \n\
+            === MUST match ===\n\
+            Single-product detail pages, for example:\n\
+            - https://shop.com/tisch-eiche-massiv-12345\n\
+            - https://shop.com/product/red-sneakers-42\n\
+            - https://christies.com/en/lot/lot-6519674\n\
+            \n\
+            === MUST NOT match ===\n\
+            - Pagination: /page/2, /page/3, ?page=2\n\
+            - Category / listing pages: /category/*, /shop/*, /collection/*, /tag/*\n\
+            - Utility: /cart, /checkout, /account, /search, /about, /contact, /impressum\n\
+            - Home page or root URL\n\
+            - Blog / story pages: /stories/*, /blog/*\n\
+            \n\
+            === Pattern rules ===\n\
+            1. Match against the FULL URL (including https://domain).\n\
+            2. Use .* prefix for scheme+domain.\n\
+            3. End the pattern with $ to anchor it.\n\
+            4. The pattern MUST reject URLs containing /page/ somewhere in the path.\n\
+            5. Be specific: \".*/[\\w-]+-\\d+$\" is better than \".*\\d+$\".\n\
+            6. If you cannot find a reliable pattern, return an empty string.\n\
+            \n\
+            First 10 URLs for context:\n\
+            {}\n\
+            \n\
+            All {} URLs:\n\
+            {}",
+            sample.join("\n"),
+            urls.len(),
             urls.join("\n")
         );
 

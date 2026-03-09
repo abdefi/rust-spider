@@ -2244,6 +2244,7 @@ name = "rust-spider"
 version = "0.1.0"
 dependencies = [
  "dotenvy",
+ "futures",
  "llm",
  "regex",
  "reqwest",

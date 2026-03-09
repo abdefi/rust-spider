@@ -20,6 +20,9 @@ pub enum AppError {
 
     #[error("Regex error: {0}")]
     Regex(#[from] regex::Error),
+
+    #[error("No product pages found: {0}")]
+    NoProducts(String),
 }
 
 

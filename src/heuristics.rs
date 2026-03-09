@@ -1,13 +1,28 @@
 /// Keywords that indicate product availability / purchase intent.
 pub static AVAILABILITY_HEURISTICS: &[&str] = &[
-    "In den Warenkorb", "In den Einkaufswagen", "Jetzt kaufen", "Kaufen", "Bestellen",
-    "Add to Cart", "Add to Basket", "Buy Now", "Buy", "Order Now", "Order", "In Stock", "Verfügbar", "Lieferbar"
+    // German
+    "in den warenkorb", "in den einkaufswagen", "jetzt kaufen", "bestellen",
+    "verfügbar", "lieferbar", "vorrätig",
+    // English
+    "add to cart", "add to basket", "buy now", "order now",
+    "in stock", "purchase", "add to bag",
+    // Auction-specific
+    "place bid", "bid now", "register to bid", "view lot",
+    "price realized", "sold for", "starting bid",
 ];
 
 /// Keywords that indicate product detail content.
 pub static DETAILS_HEURISTICS: &[&str] = &[
-    "Produktbeschreibung", "Produktdetails", "Produktinformationen", "Technische Daten", "Spezifikationen",
-    "Product Description", "Product Details", "Product Information", "Technical Specifications", "Specs"
+    // German
+    "produktbeschreibung", "produktdetails", "produktinformationen",
+    "technische daten", "spezifikationen", "maße", "beschribung",
+    // English
+    "product description", "product details", "product information",
+    "technical specifications",
+    // Auction-specific
+    "provenance", "condition report",
+    "lot details", "estimate",
+    "dimensions", "signed and dated",
 ];
 
 /// Returns `true` if the HTML contains at least one availability keyword
@@ -23,6 +38,6 @@ pub fn is_product_page(html: &str) -> bool {
         .iter()
         .any(|kw| lower.contains(kw));
 
+
     has_availability && has_details
 }
-
