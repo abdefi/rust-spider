@@ -20,8 +20,7 @@ pub static DETAILS_HEURISTICS: &[&str] = &[
     "product description", "product details", "product information",
     "technical specifications",
     // Auction-specific
-    "provenance", "condition report",
-    "lot details", "estimate",
+    "provenance", "condition report", "lot details",
     "dimensions", "signed and dated",
 ];
 
