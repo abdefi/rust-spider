@@ -26,6 +26,15 @@ pub async fn start_crawl(
 
     let mut website = Website::new(target_url);
 
+    // Crawler configuration
+    website.configuration.respect_robots_txt = true;
+    website.configuration.subdomains = false;
+    website.configuration.tld = false;
+    website.configuration.with_depth(250);
+    website.configuration.with_user_agent(Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36".into()));
+    website.configuration.delay = 50; // polite 50 ms delay
+    website.configuration.with_request_timeout(Some(std::time::Duration::from_secs(30)));
+
     if let Some(ws_url) = chrome_ws_url {
         website.configuration.with_chrome_connection(Some(ws_url));
     }
