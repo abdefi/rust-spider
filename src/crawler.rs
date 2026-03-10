@@ -8,9 +8,12 @@ use crate::error::AppError;
 use crate::heuristics::is_product_page;
 use crate::url_normalizer::normalize_url;
 
-/// A single crawled page with its normalized URL and heuristic result.
+/// A single crawled page with its normalized URL and a lightweight heuristic flag.
+/// The flag is computed once in the crawler (where HTML is already in memory)
+/// so that the HTML itself never needs to be stored.
 pub struct CrawledPage {
     pub url: String,
+    /// Pre-computed heuristic result – only consulted when Gemini fails.
     pub is_heuristic_product: bool,
 }
 

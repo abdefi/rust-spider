@@ -39,6 +39,16 @@ async fn main() -> Result<(), AppError> {
         total_crawled += 1;
         all_urls.push(page.url.clone());
 
+        // Always collect the cheap heuristic flag; only used if Gemini fails
+        if page.is_heuristic_product {
+            heuristic_products.push(page.url.clone());
+        }
+
+        // ── Log every URL during the collection phase ────────────────────
+        if !classification_done {
+            println!("  [{}] {}", total_crawled, page.url);
+        }
+
         // ── Classify once when threshold reached ─────────────────────────
         if !classification_done && all_urls.len() >= cfg.classify_threshold {
             println!("\nThreshold reached – classifying {} URLs with Gemini …", all_urls.len());
@@ -46,7 +56,10 @@ async fn main() -> Result<(), AppError> {
             classification_done = true;
 
             if pattern.is_some() {
+                // Gemini succeeded – heuristics won't be needed
                 heuristic_products.clear();
+                heuristic_products.shrink_to_fit();
+
                 for (i, url) in all_urls.iter().enumerate() {
                     if classify_url(&pattern, url) {
                         println!("  ✓ [{}] {}", i + 1, url);
@@ -57,6 +70,7 @@ async fn main() -> Result<(), AppError> {
                 let already_matched = all_urls.iter().filter(|u| classify_url(&pattern, u)).count();
                 println!("   → {} of the first {} URLs are product pages\n", already_matched, all_urls.len());
             } else {
+                println!("   → No Gemini pattern found. Falling back to heuristics.\n");
                 for (i, url) in all_urls.iter().enumerate() {
                     if heuristic_products.contains(url) {
                         println!("  ✓ [{}] (heuristic) {}", i + 1, url);
@@ -64,11 +78,11 @@ async fn main() -> Result<(), AppError> {
                         println!("  ✗ [{}] {}", i + 1, url);
                     }
                 }
-                println!("   → No Gemini pattern found. Falling back to heuristics ({} pages so far)\n", heuristic_products.len());
+                println!("   → {} of the first {} URLs are product pages (heuristic)\n", heuristic_products.len(), all_urls.len());
             }
         }
 
-        // ── Track / live-log matches ──────────────────────────────────────
+        // ── Live-log matches ─────────────────────────────────────────────
         if classification_done {
             if pattern.is_some() {
                 if classify_url(&pattern, &page.url) {
@@ -77,23 +91,16 @@ async fn main() -> Result<(), AppError> {
                     println!("  ✗ [{}] {}", total_crawled, page.url);
                 }
             } else if page.is_heuristic_product {
-                heuristic_products.push(page.url.clone());
                 println!("  ✓ [{}] (heuristic) {}", total_crawled, page.url);
             } else {
                 println!("  ✗ [{}] {}", total_crawled, page.url);
             }
-        } else if page.is_heuristic_product {
-            heuristic_products.push(page.url.clone());
         }
 
-        // ── Progress log every 100 URLs (printed after processing) ───────
+        // ── Progress log every 100 URLs ──────────────────────────────────
         if total_crawled % 100 == 0 {
-            let products_so_far = if classification_done {
-                if pattern.is_some() {
-                    all_urls.iter().filter(|u| classify_url(&pattern, u)).count()
-                } else {
-                    heuristic_products.len()
-                }
+            let products_so_far = if pattern.is_some() {
+                all_urls.iter().filter(|u| classify_url(&pattern, u)).count()
             } else {
                 heuristic_products.len()
             };
@@ -108,6 +115,8 @@ async fn main() -> Result<(), AppError> {
 
     // ── Phase 3: Apply final classification ────────────────────────────────
     println!("\nFinal classification…");
+
+
     let confirmed_products = apply_strategy(&pattern, &all_urls, &heuristic_products)?;
 
     println!("\n══════════════════════════════════════════");
