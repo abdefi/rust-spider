@@ -36,9 +36,7 @@ pub async fn find_gemini_pattern(
     }
 }
 
-
 /// Classifies a single URL against a pattern.
-/// Returns true if pattern matches, or if pattern is None (fallback to heuristics).
 pub fn classify_url(pattern: &Option<Regex>, url: &str) -> bool {
     match pattern {
         Some(re) => re.is_match(url),
@@ -46,39 +44,37 @@ pub fn classify_url(pattern: &Option<Regex>, url: &str) -> bool {
     }
 }
 
-/// Applies pattern matching to all URLs and returns confirmed product pages.
-/// If pattern is Some, applies it to all URLs.
-/// If pattern is None, uses heuristic_products as fallback.
-/// Throws NoProducts error if result is empty.
+/// Applies the pattern to all URLs and returns confirmed product pages.
+/// Returns `Err(NoProducts)` when no URLs match.
+///
+/// Designed to stay modular: plug in a different `Strategy` enum variant here
+/// in the future without changing the call-sites in `main`.
 pub fn apply_strategy(
     pattern: &Option<Regex>,
     all_urls: &[String],
-    heuristic_products: &[String],
 ) -> Result<Vec<String>, AppError> {
-    let candidates = if let Some(re) = pattern {
-        println!("Applying Gemini pattern to {} URLs …", all_urls.len());
-        let matches: Vec<String> = all_urls
-            .iter()
-            .filter(|url| re.is_match(url))
-            .cloned()
-            .collect();
-        println!("✓ {} URLs matched the pattern.", matches.len());
-        matches
-    } else {
-        println!("⚠ No pattern found – using heuristic results ({} pages).", heuristic_products.len());
-        heuristic_products.to_vec()
-    };
+    match pattern {
+        Some(re) => {
+            println!("Applying Gemini pattern to {} URLs …", all_urls.len());
+            let matches: Vec<String> = all_urls
+                .iter()
+                .filter(|url| re.is_match(url))
+                .cloned()
+                .collect();
+            println!("✓ {} URLs matched the pattern.", matches.len());
 
-    if candidates.is_empty() {
-        let reason = if pattern.is_some() {
-            "Gemini pattern matched 0 URLs".to_string()
-        } else {
-            "Heuristic engine found 0 product pages".to_string()
-        };
-        return Err(AppError::NoProducts(reason));
+            if matches.is_empty() {
+                return Err(AppError::NoProducts(
+                    "Gemini pattern matched 0 URLs".to_string(),
+                ));
+            }
+
+            Ok(dedupe_urls(matches))
+        }
+        None => Err(AppError::NoProducts(
+            "No pattern available – classification skipped".to_string(),
+        )),
     }
-
-    Ok(dedupe_urls(candidates))
 }
 
 /// Deduplicates URLs by canonical key and returns normalized, unique list.
@@ -127,25 +123,21 @@ mod tests {
     }
 
     #[test]
-    fn apply_strategy_with_pattern_throws_on_empty() {
-        let pattern = Regex::new(r"/nomatch").ok();
+    fn apply_strategy_no_pattern_returns_error() {
+        let pattern: Option<Regex> = None;
         let all_urls = vec!["https://example.com/product/1".to_string()];
-        let result = apply_strategy(&pattern, &all_urls, &[]);
+        let result = apply_strategy(&pattern, &all_urls);
         assert!(result.is_err());
-        match result {
-            Err(AppError::NoProducts(msg)) => assert!(msg.contains("pattern matched 0")),
-            _ => panic!("Expected NoProducts error"),
-        }
     }
 
     #[test]
-    fn apply_strategy_fallback_throws_on_empty() {
-        let pattern: Option<Regex> = None;
+    fn apply_strategy_with_pattern_throws_on_empty() {
+        let pattern = Regex::new(r"/nomatch").ok();
         let all_urls = vec!["https://example.com/product/1".to_string()];
-        let result = apply_strategy(&pattern, &all_urls, &[]);
+        let result = apply_strategy(&pattern, &all_urls);
         assert!(result.is_err());
         match result {
-            Err(AppError::NoProducts(msg)) => assert!(msg.contains("Heuristic engine found 0")),
+            Err(AppError::NoProducts(msg)) => assert!(msg.contains("pattern matched 0")),
             _ => panic!("Expected NoProducts error"),
         }
     }
@@ -157,22 +149,9 @@ mod tests {
             "https://example.com/product/1".to_string(),
             "https://example.com/product/2".to_string(),
         ];
-        let result = apply_strategy(&pattern, &all_urls, &[]);
+        let result = apply_strategy(&pattern, &all_urls);
         assert!(result.is_ok());
         let products = result.unwrap();
         assert_eq!(products.len(), 2);
     }
-
-    #[test]
-    fn apply_strategy_fallback_succeeds() {
-        let pattern: Option<Regex> = None;
-        let all_urls = vec!["https://example.com/product/1".to_string()];
-        let heuristic = vec!["https://example.com/product/1".to_string()];
-        let result = apply_strategy(&pattern, &all_urls, &heuristic);
-        assert!(result.is_ok());
-        let products = result.unwrap();
-        assert_eq!(products.len(), 1);
-    }
-
 }
-

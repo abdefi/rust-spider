@@ -1,12 +1,13 @@
 use url::Url;
 
-/// Normalizes URLs for stable output and comparison.
+/// Normalizes URLs for stable deduplication and comparison.
 ///
 /// Rules:
-/// - remove query and fragment
-/// - trim trailing slash (except root)
+/// - preserve query string (query params ARE meaningful navigation on PHP sites)
+/// - remove fragment only
+/// - sort query parameters for stable comparison
+/// - trim trailing slash on paths (except bare root)
 /// - lowercase scheme and host
-/// - keep path as-is
 pub fn normalize_url(raw: &str) -> String {
     let trimmed = raw.trim();
 
@@ -14,20 +15,37 @@ pub fn normalize_url(raw: &str) -> String {
         return trimmed.trim_end_matches('/').to_string();
     };
 
-    parsed.set_query(None);
+    // Sort query parameters for stable deduplication
+    // e.g. ?id=1&cat=2 and ?cat=2&id=1 are the same page
+    if let Some(query) = parsed.query() {
+        if !query.is_empty() {
+            let mut pairs: Vec<(String, String)> = parsed
+                .query_pairs()
+                .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                .collect();
+            pairs.sort();
+            let sorted_query = pairs
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join("&");
+            parsed.set_query(Some(&sorted_query));
+        }
+    }
+
+    // Strip fragment only
     parsed.set_fragment(None);
 
     let normalized = parsed.to_string();
 
     // Keep root slash (scheme://host/), trim trailing slash on paths
-    if normalized.ends_with("/") && !normalized.ends_with("://") {
-        let parts: Vec<&str> = normalized.split("://").collect();
-        if parts.len() == 2 {
-            let after_scheme = parts[1];
-            // Check if this is just domain + single slash
-            let has_path = after_scheme.contains("/") && after_scheme.find("/").unwrap() < after_scheme.len() - 1;
-            if has_path {
-                return normalized.trim_end_matches("/").to_string();
+    if normalized.ends_with('/') {
+        let without = normalized.trim_end_matches('/');
+        // Only strip if there is still a path component after the host
+        if without.contains("://") && without.contains('/') {
+            let after_scheme = without.splitn(2, "://").nth(1).unwrap_or("");
+            if after_scheme.contains('/') {
+                return without.to_string();
             }
         }
     }
